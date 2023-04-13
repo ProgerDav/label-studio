@@ -36,7 +36,7 @@ class DeepLakeStorageMixin(models.Model):
     def get_dataset(self, read_only=True):
         return deeplake.load(
             self.dataset_path,
-            token="eyJhbGciOiJIUzUxMiIsImlhdCI6MTY4MDAwNTU3MiwiZXhwIjoxNjg1NTM1MTIwfQ.eyJpZCI6InByb2dlcmRhdiJ9.1HKf6qCNn-3JzODXsxlaBjyz-ipcDymyXKCWl3QbmtErYKf9dy_6M6LwNaGm5uJ6rhveO-YCDME8pY_fpflvOQ",
+            token=self.activeloop_token,
             read_only=read_only,
             verbose=False,
         )
