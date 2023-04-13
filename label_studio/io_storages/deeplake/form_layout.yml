@@ -1,0 +1,58 @@
+# 2x2 grid
+deeplake_params: &deeplake_params
+  - type: text
+    name: dataset_path
+    label: DeepLake Dataset path
+    placeholder: "hub://organization/dataset_name"
+  - type: password
+    name: activeloop_token
+    label: Activeloop Token
+    autoComplete: "new-password"
+    description: Can be obtained from your Profile page at activeloop platform.
+
+ImportStorage:
+  - columnCount: 2
+    fields: *deeplake_params
+  # Regex filter
+  - columnCount: 1
+    fields:
+      - type: text
+        name: title
+        label: Storage Title
+  - columnCount: 2
+    fields:
+      - type: text
+        name: source_tensor_name
+        label: Source Tensor Name
+        placeholder: 'images'
+      - type: url
+        name: server_base_url
+        label: Base URL of Server
+        placeholder: 'http://localhost:7777/'
+
+  # 2 columns grid
+  # - columnCount: 1
+  #   fields:
+  #     - type: toggle
+  #       name: use_blob_urls
+  #       label: Treat every bucket object as a source file
+  #       description: If unchecked, treat every bucket object as a JSON-formatted task. Optional
+
+ExportStorage:
+  - columnCount: 2
+    fields: *deeplake_params
+  # Regex filter
+  - columnCount: 1
+    fields:
+      - type: text
+        name: title
+        label: Storage Title
+  - columnCount: 2
+    fields:
+      - type: text
+        name: source_key
+        label: Task Source Key
+        description: Key which hold the data in the Task JSON
+      - type: text
+        name: destination_tensor
+        label: Destination Tensor Name

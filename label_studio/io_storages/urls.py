@@ -6,6 +6,7 @@ from .s3.api import *
 from .azure_blob.api import *
 from .gcs.api import *
 from .redis.api import *
+from .deeplake.api import *
 from .localfiles.api import *
 from .all_api import *
 
@@ -62,6 +63,17 @@ _api_urlpatterns = [
     path('export/redis/<int:pk>/sync', RedisExportStorageSyncAPI.as_view(), name='export-storage-redis-sync'),
     path('export/redis/validate', RedisExportStorageValidateAPI.as_view(), name='export-storage-redis-validate'),
     path('export/redis/form', RedisExportStorageFormLayoutAPI.as_view(), name='export-storage-redis-form'),
+    # Deep Lake
+    path('deeplake/', DeepLakeImportStorageListAPI.as_view(), name='storage-deeplake-list'),
+    path('deeplake/<int:pk>', DeepLakeImportStorageDetailAPI.as_view(), name='storage-deeplake-detail'),
+    path('deeplake/<int:pk>/sync', DeepLakeImportStorageSyncAPI.as_view(), name='storage-deeplake-sync'),
+    path('deeplake/validate', DeepLakeImportStorageValidateAPI.as_view(), name='storage-deeplake-validate'),
+    path('deeplake/form', DeepLakeImportStorageFormLayoutAPI.as_view(), name='storage-deeplake-form'),
+    path('export/deeplake', DeepLakeExportStorageListAPI.as_view(), name='export-storage-deeplake-list'),
+    path('export/deeplake/<int:pk>', DeepLakeExportStorageDetailAPI.as_view(), name='export-storage-deeplake-detail'),
+    path('export/deeplake/<int:pk>/sync', DeepLakeExportStorageSyncAPI.as_view(), name='export-storage-deeplake-sync'),
+    path('export/deeplake/validate', DeepLakeExportStorageValidateAPI.as_view(), name='export-storage-deeplake-validate'),
+    path('export/deeplake/form', DeepLakeExportStorageFormLayoutAPI.as_view(), name='export-storage-deeplake-form'), 
 ]
 if settings.ENABLE_LOCAL_FILES_STORAGE:
     _api_urlpatterns += [
