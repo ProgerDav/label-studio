@@ -162,7 +162,7 @@ class DeepLakeExportStorage(DeepLakeStorageMixin, ExportStorage):
         DeepLakeExportStorageLink.create(annotation, self)
 
     def _process_image_url(self, image_url: str):
-        prefix = "/data/deeplake-files/?d=/"
+        prefix = "/data/deeplake-files/"
         if not image_url.startswith(prefix):
             raise ValueError(f"Unsupported protocol for sample url in {image_url}")
 
