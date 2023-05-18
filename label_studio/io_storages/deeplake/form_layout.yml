@@ -25,10 +25,6 @@ ImportStorage:
         name: source_tensor_name
         label: Source Tensor Name
         placeholder: 'images'
-      - type: url
-        name: server_base_url
-        label: Base URL of Server
-        placeholder: 'http://localhost:7777/'
 
   # 2 columns grid
   # - columnCount: 1

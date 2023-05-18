@@ -33,13 +33,15 @@ from core.utils.io import find_file
 from core.label_config import generate_time_series_json
 from core.utils.common import collect_versions
 from io_storages.localfiles.models import LocalFilesImportStorage
+from io_storages.deeplake.models import DeepLakeImportStorage
 from core.feature_flags import all_flags
-
 
 logger = logging.getLogger(__name__)
 
 
 _PARAGRAPH_SAMPLE = None
+
+_DATASETS_CACHE = {}
 
 
 def main(request):
@@ -216,22 +218,34 @@ def localfiles_data(request):
 
 def deeplakefiles_data(request):
     """Serving files for DeepLakeImportStorage"""
-    from requests import get
+    storage_id = request.GET.get("storage_id")
+    if not storage_id:
+        return HttpResponseForbidden("Invalid Storage ID.")
 
-    deeplake_serving_document_root = settings.DEEPLAKE_FILES_DOCUMENT_ROOT
-    deeplake_files_api_key = settings.DEEPLAKE_FILES_API_KEY
-    path = request.GET.get("d")
+    key = int(request.GET.get("key", -1))
+    if key == -1:
+        return HttpResponseForbidden("Invalid Sample Key.")
 
-    if not path:
-        return HttpResponseForbidden()
+    storage = DeepLakeImportStorage.objects.filter(id=storage_id).first()
+    if not storage:
+        return HttpResponseNotFound("Storage Not Found.")
 
-    if path.startswith("/"):
-        path = path[1:]
+    if not storage.project.has_permission(request.user):
+        return HttpResponseForbidden(
+            "You don't have permission to access this storage."
+        )
 
-    server_response = get(
-        deeplake_serving_document_root + path + "?api_key=" + deeplake_files_api_key
-    )
-    return HttpResponse(server_response.content, headers=server_response.headers)
+    if _DATASETS_CACHE.get(storage_id) is None:
+        if len(_DATASETS_CACHE) > 10:
+            _DATASETS_CACHE.clear()
+
+        _DATASETS_CACHE[storage_id] = storage.get_dataset(read_only=True)
+
+    dataset = _DATASETS_CACHE[storage_id]
+    tensor = storage.source_tensor_name
+    content_type = f"{dataset[tensor].htype}/{dataset[tensor].meta.sample_compression}"
+
+    return HttpResponse(dataset[tensor][key].tobytes(), content_type=content_type)
 
 
 def static_file_with_host_resolver(path_on_disk, content_type):

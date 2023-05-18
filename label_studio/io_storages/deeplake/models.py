@@ -68,12 +68,6 @@ class DeepLakeImportStorageBase(DeepLakeStorageMixin, ImportStorage):
         blank=True,
         help_text="Name of the tensor containing the source data",
     )
-    # server_base_url = models.TextField(
-    #     _("server_base_url"),
-    #     null=True,
-    #     blank=True,
-    #     help_text="Base URL of the server",
-    # )
 
     url_scheme = "hub"
 
@@ -92,10 +86,9 @@ class DeepLakeImportStorageBase(DeepLakeStorageMixin, ImportStorage):
             )
 
     def get_data(self, key):
-        org, ds = self.dataset_path[6:].split("/")
-        template = f"/api/dataset/{org}/{ds}/{self.source_tensor_name}/data/{key}"
-
-        return {settings.DATA_UNDEFINED_NAME: f"/data/deeplake-files/?d={template}"}
+        return {
+            settings.DATA_UNDEFINED_NAME: f"/data/deeplake-files/?key={key}&storage_id={self.pk}"
+        }
 
     # def generate_http_url(self, url):
     #     return GCS.generate_http_url(
@@ -168,6 +161,28 @@ class DeepLakeExportStorage(DeepLakeStorageMixin, ExportStorage):
         # create link if everything ok
         DeepLakeExportStorageLink.create(annotation, self)
 
+    def _process_image_url(self, image_url: str):
+        prefix = "/data/deeplake-files/?d=/"
+        if not image_url.startswith(prefix):
+            raise ValueError(f"Unsupported protocol for sample url in {image_url}")
+
+        uri = image_url[len(prefix) :]
+        parts = uri.split("/")
+        assert len(parts) == 7, f"Unsupported sample url in {image_url}"
+
+        _, _, org, ds, tensor, _, key = parts
+
+        return f"{org}/{ds}", tensor, int(key)
+
+    def _handle_non_same_dataset(self, dataset: deeplake.Dataset, image_url: str):
+        dataset_id, tensor, key = self._process_image_url(image_url)
+
+        sample = deeplake.read(settings.HOSTNAME + image_url)
+        if tensor not in dataset.tensors:
+            dataset.create_tensor(tensor, htype="image", sample_compression="jpeg")
+
+        dataset[tensor].append(sample)
+
     def save_annotation(self, annotation, token: str = "", dataset=None):
         ser_annotation = self._get_serialized_data(annotation)
         if dataset is None:
@@ -177,43 +192,55 @@ class DeepLakeExportStorage(DeepLakeStorageMixin, ExportStorage):
             f"Creating new object on {self.__class__.__name__} Storage {self} for annotation {annotation}"
         )
 
-        with dataset:
-            task = ser_annotation["task"]
-            image_url = task["data"][self.source_key]
-            sample = deeplake.read(settings.HOSTNAME + image_url)
-            dataset[self.destination_tensor].append(sample)
+        task = ser_annotation["task"]
+        image_url = task["data"][self.source_key]
+        dataset_id, tensor, key = self._process_image_url(image_url)
+        is_same_dataset = dataset_id in self.dataset_path
 
-            objects = []
-            width = ser_annotation["result"][0]["original_width"]
-            height = ser_annotation["result"][0]["original_height"]
-            for id, result in enumerate(ser_annotation["result"]):
-                if result["type"] == "polygonlabels":
-                    points = result["value"]["points"]
-                    label = result["value"]["polygonlabels"][0]
-                    objects.append(
-                        {
-                            "id": id,
-                            "label": label,
-                            "polygon": points,
-                        }
-                    )
+        if not is_same_dataset:
+            self._handle_non_same_dataset(dataset, key)
 
-            json_data = {"objects": objects, "width": width, "height": height}
-            dataset["polygons"].append(json_data)
+        if self.destination_tensor not in dataset.tensors:
+            dataset.create_tensor(self.destination_tensor, htype="json")
 
-        dataset._unlock()
+        objects = []
+        width = ser_annotation["result"][0]["original_width"]
+        height = ser_annotation["result"][0]["original_height"]
+        for id, result in enumerate(ser_annotation["result"]):
+            if result["type"] == "polygonlabels":
+                points = result["value"]["points"]
+                label = result["value"]["polygonlabels"][0]
+                objects.append(
+                    {
+                        "id": id,
+                        "label": label,
+                        "polygon": points,
+                    }
+                )
+
+        json_data = {"objects": objects, "width": width, "height": height}
+
+        if is_same_dataset:
+            dataset[self.destination_tensor][key] = json_data
+        else:
+            dataset[self.destination_tensor].append(json_data)
+
         # get key that identifies this object in storage
         key = DeepLakeExportStorageLink.get_key(annotation)
 
         # create link if everything ok
         DeepLakeExportStorageLink.create(annotation, self)
 
-    def save_all_annotations(self, token: str, dataset=None):
+    def save_all_annotations(self, token: str):
         annotation_exported = 0
-        for annotation in Annotation.objects.filter(project=self.project):
-            self.save_annotation(annotation, token, dataset)
-            annotation_exported += 1
+        dataset = self.get_dataset(read_only=False)
 
+        with dataset:
+            for annotation in Annotation.objects.filter(project=self.project):
+                self.save_annotation(annotation, token, dataset)
+                annotation_exported += 1
+
+        dataset._unlock()
         self.last_sync = timezone.now()
         self.last_sync_count = annotation_exported
         self.save()
@@ -231,9 +258,8 @@ class DeepLakeExportStorage(DeepLakeStorageMixin, ExportStorage):
                 f"Storage sync background job {job.id} for storage {self} has been started"
             )
         else:
-            dataset = self.get_dataset(read_only=False)
             logger.info(f"Start syncing storage {self}")
-            self.save_all_annotations(token, dataset)
+            self.save_all_annotations(token)
 
 
 @job("low", timeout=settings.RQ_LONG_JOB_TIMEOUT)
