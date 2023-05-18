@@ -4,6 +4,8 @@ import json
 import deeplake
 import numpy as np
 import django_rq
+from urllib.parse import urlparse
+from urllib.parse import parse_qs
 
 from core.redis import start_job_async_or_sync
 from django.db import models
@@ -166,13 +168,15 @@ class DeepLakeExportStorage(DeepLakeStorageMixin, ExportStorage):
         if not image_url.startswith(prefix):
             raise ValueError(f"Unsupported protocol for sample url in {image_url}")
 
-        uri = image_url[len(prefix) :]
-        parts = uri.split("/")
-        assert len(parts) == 7, f"Unsupported sample url in {image_url}"
+        parsed_url = urlparse(image_url)
+        key = parse_qs(parsed_url.query)["key"][0]
+        storage_id = parse_qs(parsed_url.query)["storage_id"][0]
 
-        _, _, org, ds, tensor, _, key = parts
+        storage = DeepLakeImportStorage.objects.get(pk=storage_id)
+        dataset_id = storage.dataset_path.split("://")[-1]
+        tensor = storage.source_tensor_name
 
-        return f"{org}/{ds}", tensor, int(key)
+        return dataset_id, tensor, int(key)
 
     def _handle_non_same_dataset(self, dataset: deeplake.Dataset, image_url: str):
         dataset_id, tensor, key = self._process_image_url(image_url)
