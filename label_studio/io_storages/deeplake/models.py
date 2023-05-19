@@ -195,12 +195,10 @@ class DeepLakeExportStorage(DeepLakeStorageMixin, ExportStorage):
 
         base = settings.TINYMILE_SCRIPTS_BASEURL
         train_dataset = self.dataset_path.split("://")[-1]
-        test_dataset = ""
+        # test_dataset = ""
 
         try:
-            requests.get(
-                f"{base}/train?train_dataset={train_dataset}&test_dataset={test_dataset}"
-            )
+            requests.get(f"{base}/train?train_dataset={train_dataset}")
         except Exception as e:
             logger.error(f"Failed to notify sync end: {e}")
 
