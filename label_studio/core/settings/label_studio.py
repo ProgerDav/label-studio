@@ -25,7 +25,7 @@ SESSION_COOKIE_SECURE = get_bool_env('SESSION_COOKIE_SECURE', False)
 
 SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 
-RQ_QUEUES = {}
+# RQ_QUEUES = {}
 
 SENTRY_DSN = get_env(
     'SENTRY_DSN',

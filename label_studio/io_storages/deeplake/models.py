@@ -169,8 +169,11 @@ class DeepLakeExportStorage(DeepLakeStorageMixin, ExportStorage):
             raise ValueError(f"Unsupported protocol for sample url in {image_url}")
 
         parsed_url = urlparse(image_url)
-        key = parse_qs(parsed_url.query)["key"][0]
-        storage_id = parse_qs(parsed_url.query)["storage_id"][0]
+        try:
+            key = parse_qs(parsed_url.query)["key"][0]
+            storage_id = parse_qs(parsed_url.query)["storage_id"][0]
+        except KeyError:
+            raise ValueError(f"Unsupported sample url in {image_url}")
 
         storage = DeepLakeImportStorage.objects.get(pk=storage_id)
         dataset_id = storage.dataset_path.split("://")[-1]
@@ -187,7 +190,21 @@ class DeepLakeExportStorage(DeepLakeStorageMixin, ExportStorage):
 
         dataset[tensor].append(sample)
 
-    def save_annotation(self, annotation, token: str = "", dataset=None):
+    def _notify_sync_end(self):
+        import requests
+
+        base = settings.TINYMILE_SCRIPTS_BASEURL
+        train_dataset = self.dataset_path.split("://")[-1]
+        test_dataset = ""
+
+        try:
+            requests.get(
+                f"{base}/train?train_dataset={train_dataset}&test_dataset={test_dataset}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify sync end: {e}")
+
+    def save_annotation(self, annotation, dataset=None):
         ser_annotation = self._get_serialized_data(annotation)
         if dataset is None:
             dataset = self.get_dataset(read_only=False)
@@ -235,21 +252,24 @@ class DeepLakeExportStorage(DeepLakeStorageMixin, ExportStorage):
         # create link if everything ok
         DeepLakeExportStorageLink.create(annotation, self)
 
-    def save_all_annotations(self, token: str):
+    def save_all_annotations(self):
         annotation_exported = 0
         dataset = self.get_dataset(read_only=False)
 
         with dataset:
             for annotation in Annotation.objects.filter(project=self.project):
-                self.save_annotation(annotation, token, dataset)
+                self.save_annotation(annotation, dataset)
                 annotation_exported += 1
 
         dataset._unlock()
+
+        self._notify_sync_end()
+
         self.last_sync = timezone.now()
         self.last_sync_count = annotation_exported
         self.save()
 
-    def sync(self, token: str = ""):
+    def sync(self):
         if redis_connected():
             queue = django_rq.get_queue("low")
             job = queue.enqueue(
@@ -263,7 +283,7 @@ class DeepLakeExportStorage(DeepLakeStorageMixin, ExportStorage):
             )
         else:
             logger.info(f"Start syncing storage {self}")
-            self.save_all_annotations(token)
+            self.save_all_annotations()
 
 
 @job("low", timeout=settings.RQ_LONG_JOB_TIMEOUT)

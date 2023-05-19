@@ -99,15 +99,6 @@ class DeepLakeImportStorageSyncAPI(ImportStorageSyncAPI):
 class DeepLakeExportStorageSyncAPI(ExportStorageSyncAPI):
     serializer_class = DeepLakeExportStorageSerializer
 
-    def post(self, request, *args, **kwargs):
-        token = Token.objects.get(user=request.user)
-        storage = self.get_object()
-        # check connectivity & access, raise an exception if not satisfied
-        storage.validate_connection()
-        storage.sync(token=str(token))
-        storage.refresh_from_db()
-        return Response(self.serializer_class(storage).data)
-
 
 @method_decorator(
     name='post',
